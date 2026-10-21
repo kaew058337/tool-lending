@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ยืม-คืนเครื่องมือ</title>
+<style>
+  :root {
+    --bg: #f3f6f4; --card: #ffffff; --text: #16211b; --muted: #66746c; --line: #dfe6e1;
+    --brand: #06c755; --brand-d: #049a41; --on-brand: #ffffff;
+    --free-bg: #dff7e8; --free: #0a7a3a;
+    --busy-bg: #fff1d0; --busy: #8a5a00;
+    --bad: #c0362c; --shadow: 0 1px 2px rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101513; --card: #19201d; --text: #e8efea; --muted: #94a39a; --line: #2a3430;
+      --free-bg: #12361f; --free: #6fe39a; --busy-bg: #3b2e0e; --busy: #f3c969;
+      --bad: #ff8a80; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Noto Sans Thai", "Sarabun", sans-serif; font-size: 16px; }
+  button, input, textarea { font: inherit; color: inherit; }
+
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 16px 0;
+    padding-top: max(12px, env(safe-area-inset-top)); }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  h1 { font-size: 1.15rem; margin: 0; }
+  .who { font-size: .8rem; color: var(--muted); max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-btn { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 6px 10px; cursor: pointer; }
+
+  .tabs { display: flex; gap: 6px; margin-top: 10px; }
+  .tab { flex: 1; padding: 9px 8px; border: 1px solid var(--line); background: var(--card);
+    border-radius: 10px; cursor: pointer; font-weight: 600; color: var(--muted); }
+  .tab[aria-selected="true"] { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+
+  .tools { display: flex; gap: 8px; margin-top: 10px; }
+  .search { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line);
+    background: var(--card); border-radius: 10px; }
+  .btn { border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer;
+    background: var(--brand); color: var(--on-brand); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+  .btn.warn { background: #f59e0b; color: #1d1300; }
+
+  .row2 { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin: 8px 0 10px; font-size: .85rem; color: var(--muted); }
+  .chips { display: flex; gap: 6px; }
+  .chip { border: 1px solid var(--line); background: var(--card); border-radius: 999px;
+    padding: 4px 12px; cursor: pointer; font-size: .85rem; color: var(--muted); }
+  .chip[aria-pressed="true"] { border-color: var(--brand); color: var(--brand-d); font-weight: 700; }
+  @media (prefers-color-scheme: dark) { .chip[aria-pressed="true"] { color: var(--brand); } }
+  label.cont { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+  main { padding: 0 16px 230px; }
+  .card { width: 100%; text-align: left; display: flex; gap: 12px; align-items: flex-start;
+    background: var(--card); border: 2px solid transparent; border-radius: 14px;
+    padding: 12px; margin-bottom: 10px; box-shadow: var(--shadow); cursor: pointer; }
+  .card[aria-disabled="true"] { opacity: .6; cursor: default; }
+  .card.sel { border-color: var(--brand); }
+  .tick { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line);
+    display: grid; place-items: center; font-size: .9rem; color: transparent; margin-top: 2px; }
+  .card.sel .tick { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+  .info { flex: 1; min-width: 0; }
+  .name, .meta { display: block; }
+  .name { font-weight: 700; overflow-wrap: anywhere; }
+  .meta { font-size: .82rem; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+  .code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .78rem;
+    background: var(--bg); border-radius: 6px; padding: 1px 6px; margin-right: 6px; }
+  .pill { flex: none; font-size: .75rem; font-weight: 700; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .pill.free { background: var(--free-bg); color: var(--free); }
+  .pill.busy { background: var(--busy-bg); color: var(--busy); }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+
+  #bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--card);
+    border-top: 1px solid var(--line); padding: 10px 16px; padding-bottom: max(10px, env(safe-area-inset-bottom));
+    box-shadow: 0 -4px 14px rgba(0,0,0,.08); }
+  .sum { display: flex; align-items: center; justify-content: space-between; font-size: .9rem; margin-bottom: 6px; }
+  .basket { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; max-height: 64px; overflow: auto; }
+  .bchip { display: inline-flex; align-items: center; gap: 4px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 999px; padding: 2px 4px 2px 10px; font-size: .8rem; }
+  .bchip button { border: 0; background: transparent; cursor: pointer; font-size: 1rem; line-height: 1; padding: 2px 6px; color: var(--muted); }
+  #note { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 10px;
+    padding: 8px 10px; margin-bottom: 8px; resize: none; }
+  .actions { display: flex; gap: 8px; }
+  .actions .btn { flex: 1; }
+  .hint { color: var(--muted); font-size: .85rem; text-align: center; padding: 4px 0; }
+
+  #toast { position: fixed; left: 50%; top: max(16px, env(safe-area-inset-top)); transform: translateX(-50%);
+    background: #222; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: .9rem; z-index: 20;
+    max-width: 90vw; display: none; text-align: center; }
+  #toast.err { background: var(--bad); }
+
+  #modal { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,.5); display: none;
+    align-items: flex-end; justify-content: center; }
+  #modal.open { display: flex; }
+  .sheet { background: var(--card); width: 100%; max-width: 560px; border-radius: 18px 18px 0 0;
+    padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); max-height: 80vh; overflow: auto; }
+  .sheet h2 { margin: 0 0 10px; font-size: 1.05rem; }
+  .res { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: .92rem; }
+  .res:last-of-type { border-bottom: 0; }
+  .res .mark { flex: none; font-weight: 800; }
+  .res.ok .mark { color: var(--free); }
+  .res.fail .mark { color: var(--bad); }
+  .fatal { margin: 40px 16px; padding: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>ยืม-คืนเครื่องมือ</h1>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="who" id="who"></span>
+      <button class="icon-btn" id="refresh" title="รีเฟรช" aria-label="รีเฟรช">↻</button>
+    </div>
+  </div>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-all" aria-selected="true">เครื่องมือทั้งหมด</button>
+    <button class="tab" role="tab" id="tab-mine" aria-selected="false">ของฉัน (<span id="mineCount">0</span>)</button>
+  </div>
+  <div class="tools">
+    <input class="search" id="q" type="search" placeholder="ค้นหา ชื่อ / รหัส / S/N / หมวดหมู่" autocomplete="off">
+    <button class="btn" id="scan" hidden>สแกน QR</button>
+  </div>
+  <div class="row2">
+    <div class="chips" id="chips">
+      <button class="chip" data-f="all" aria-pressed="true">ทั้งหมด</button>
+      <button class="chip" data-f="free" aria-pressed="false">ว่าง</button>
+      <button class="chip" data-f="busy" aria-pressed="false">ถูกยืม</button>
+    </div>
+    <label class="cont" id="contWrap" hidden><input type="checkbox" id="cont" checked> สแกนต่อเนื่อง</label>
+  </div>
+</header>
+
+<main id="list"><div class="empty">กำลังโหลด…</div></main>
+
+<div id="bar" hidden>
+  <div class="sum"><span id="sumText"></span><button class="icon-btn" id="clear">ล้างทั้งหมด</button></div>
+  <div class="basket" id="basket"></div>
+  <textarea id="note" rows="2" maxlength="300" placeholder="หมายเหตุตอนคืน (ถ้ามี) เช่น สภาพเครื่อง ชำรุด ขาดอุปกรณ์" hidden></textarea>
+  <div class="actions">
+    <button class="btn" id="doBorrow" hidden></button>
+    <button class="btn warn" id="doReturn" hidden></button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="modal"><div class="sheet" id="sheet"></div></div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+// ============ ตั้งค่า 2 ค่านี้ก่อนใช้งาน ============
+var CONFIG = {
+  LIFF_ID: 'ใส่ LIFF ID ที่นี่',            // เช่น 1234567890-AbcdEfgh
+  API_URL: 'ใส่ Web app URL ที่ลงท้าย /exec ที่นี่' // URL ของ Apps Script (ไม่ต้องมี ?key=)
+};
+// ===================================================
+
+(function () {
+  'use strict';
+
+  var ERRORS = {
+    NO_TOKEN: 'ไม่พบ ID token ตรวจว่า LIFF ตั้ง Scope openid และ profile แล้ว',
+    INVALID_TOKEN: 'ยืนยันตัวตนไม่สำเร็จ ตรวจว่า LIFF ID ในชีต Config ช่อง B3 ตรงกับที่ใช้ในหน้านี้',
+    LIFF_NOT_CONFIGURED: 'ยังไม่ได้ใส่ LIFF ID ในชีต Config ช่อง B3',
+    BAD_REQUEST: 'คำขอไม่ถูกต้อง',
+    TOO_MANY_ITEMS: 'เลือกได้ครั้งละไม่เกิน 30 ชิ้น',
+    UNKNOWN_ACTION: 'คำสั่งไม่ถูกต้อง'
+  };
+
+  var state = {
+    tools: [], me: { name: '', isAdmin: false },
+    tab: 'all', filter: 'all', q: '',
+    basket: [],            // รหัสเครื่องมือที่เลือก (ตามลำดับที่เพิ่ม)
+    busy: false, canScan: false, scanning: false
+  };
+
+  function $(s) { return document.querySelector(s); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ---------- ข้อความแจ้งเตือน ----------
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    var t = $('#toast');
+    t.textContent = msg;
+    t.className = isErr ? 'err' : '';
+    t.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.style.display = 'none'; }, isErr ? 4500 : 2200);
+  }
+  function fatal(msg) {
+    document.body.innerHTML = '<div class="fatal"><b>ใช้งานไม่ได้</b><p>' + esc(msg) + '</p></div>';
+  }
+
+  // ---------- เรียก API (Apps Script) ----------
+  function relogin() {
+    try { liff.logout(); } catch (e) {}
+    liff.login({ redirectUri: location.href });
+  }
+
+  async function api(action, payload) {
+    var body = Object.assign({ action: action, idToken: liff.getIDToken() }, payload || {});
+    var res;
+    try {
+      // ใช้ text/plain เพื่อเลี่ยง CORS preflight ซึ่ง Apps Script ไม่รองรับ
+      res = await fetch(CONFIG.API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(body)
+      });
+    } catch (e) {
+      throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจอินเทอร์เน็ตและ API_URL แล้วลองใหม่');
+    }
+    var data;
+    try { data = await res.json(); } catch (e) {
+      throw new Error('เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ ตรวจว่า Deploy เป็น Web app แบบ Anyone และใช้ URL ที่ลงท้าย /exec');
+    }
+    if (!data.ok) {
+      if (data.error === 'TOKEN_EXPIRED') {
+        relogin();
+        throw new Error('เซสชันหมดอายุ กำลังเข้าสู่ระบบใหม่…');
+      }
+      throw new Error(ERRORS[data.error] || data.error || 'เกิดข้อผิดพลาด');
+    }
+    return data;
+  }
+
+  // ---------- ข้อมูล ----------
+  function findTool(id) {
+    var k = String(id).trim().toLowerCase();
+    for (var i = 0; i < state.tools.length; i++) {
+      if (state.tools[i].id.toLowerCase() === k) return state.tools[i];
+    }
+    return null;
+  }
+  function kindOf(t) {
+    if (!t.busy) return 'free';
+    if (t.mine) return 'mine';
+    return state.me.isAdmin ? 'admin' : 'other';
+  }
+
+  async function refresh() {
+    var d = await api('list');
+    state.me = d.user;
+    state.tools = d.tools;
+    state.basket = state.basket.filter(function (id) {
+      var t = findTool(id);
+      return t && kindOf(t) !== 'other';
+    });
+    render();
+  }
+
+  // ---------- วาดหน้าจอ ----------
+  function visibleTools() {
+    var q = state.q.trim().toLowerCase();
+    return state.tools.filter(function (t) {
+      if (state.tab === 'mine') return t.mine;
+      if (state.filter === 'free' && t.busy) return false;
+      if (state.filter === 'busy' && !t.busy) return false;
+      if (!q) return true;
+      return (t.id + ' ' + t.name + ' ' + t.cat + ' ' + t.sn + ' ' + t.borrower).toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  function render() {
+    $('#who').textContent = state.me.name + (state.me.isAdmin ? ' (แอดมิน)' : '');
+    $('#mineCount').textContent = state.tools.filter(function (t) { return t.mine; }).length;
+    $('#tab-all').setAttribute('aria-selected', state.tab === 'all');
+    $('#tab-mine').setAttribute('aria-selected', state.tab === 'mine');
+    $('#chips').style.display = state.tab === 'all' ? 'flex' : 'none';
+
+    var list = visibleTools();
+    var html = list.map(function (t) {
+      var kind = kindOf(t);
+      var sel = state.basket.indexOf(t.id) >= 0;
+      var disabled = kind === 'other';
+      var pill = t.busy
+        ? '<span class="pill busy">' + (t.mine ? 'คุณยืมอยู่' : 'ถูกยืม') + '</span>'
+        : '<span class="pill free">ว่าง</span>';
+      var line2 = [];
+      if (t.cat) line2.push(esc(t.cat));
+      if (t.sn) line2.push('S/N: ' + esc(t.sn));
+      var line3 = t.busy ? 'ผู้ยืม: ' + esc(t.borrower) + ' · ตั้งแต่ ' + esc(t.since) : '';
+      return '<button class="card' + (sel ? ' sel' : '') + '" data-id="' + esc(t.id) + '"' +
+        (disabled ? ' aria-disabled="true"' : '') + '>' +
+        '<span class="tick">✓</span>' +
+        '<span class="info"><span class="name"><span class="code">' + esc(t.id) + '</span>' + esc(t.name) + '</span>' +
+        (line2.length ? '<span class="meta">' + line2.join(' · ') + '</span>' : '') +
+        (line3 ? '<span class="meta">' + line3 + '</span>' : '') + '</span>' + pill + '</button>';
+    }).join('');
+    $('#list').innerHTML = html ||
+      '<div class="empty">' + (state.tab === 'mine' ? 'คุณไม่ได้ยืมเครื่องมือใดอยู่' : 'ไม่พบเครื่องมือที่ตรงกับเงื่อนไข') + '</div>';
+    renderBar();
+  }
+
+  function splitBasket() {
+    var borrow = [], ret = [];
+    state.basket.forEach(function (id) {
+      var t = findTool(id);
+      if (!t) return;
+      var k = kindOf(t);
+      if (k === 'free') borrow.push(t.id);
+      else if (k === 'mine' || k === 'admin') ret.push(t.id);
+    });
+    return { borrow: borrow, ret: ret };
+  }
+
+  function renderBar() {
+    var bar = $('#bar');
+    var n = state.basket.length;
+    bar.hidden = n === 0;
+    document.querySelector('main').style.paddingBottom = n ? '230px' : '24px';
+    if (!n) return;
+    var s = splitBasket();
+    $('#sumText').textContent = 'เลือกแล้ว ' + n + ' ชิ้น';
+    $('#basket').innerHTML = state.basket.map(function (id) {
+      return '<span class="bchip">' + esc(id) + '<button data-rm="' + esc(id) + '" aria-label="เอาออก">×</button></span>';
+    }).join('');
+    var b = $('#doBorrow'), r = $('#doReturn');
+    b.hidden = s.borrow.length === 0;
+    r.hidden = s.ret.length === 0;
+    b.textContent = 'ยืม ' + s.borrow.length + ' ชิ้น';
+    r.textContent = 'คืน ' + s.ret.length + ' ชิ้น';
+    b.disabled = r.disabled = state.busy;
+    $('#note').hidden = s.ret.length === 0;
+  }
+
+  // ---------- ตะกร้า ----------
+  function toggle(id) {
+    var i = state.basket.indexOf(id);
+    if (i >= 0) state.basket.splice(i, 1); else state.basket.push(id);
+    render();
+  }
+
+  function addScanned(raw) {
+    var id = parseToolId(raw, false);
+    var t = findTool(id);
+    if (!t) { toast('ไม่พบเครื่องมือ: ' + id, true); return false; }
+    if (kindOf(t) === 'other') { toast(t.id + ' ถูกยืมโดย ' + t.borrower, true); return false; }
+    if (state.basket.indexOf(t.id) >= 0) { toast(t.id + ' อยู่ในรายการแล้ว'); return true; }
+    state.basket.push(t.id);
+    render();
+    toast('เพิ่ม ' + t.id + ' ' + t.name + (t.busy ? ' (คืน)' : ' (ยืม)'));
+    return true;
+  }
+
+  // อ่านรหัสเครื่องมือจากค่าใน QR (ลิงก์ LIFF, ลิงก์แชทแบบเดิม หรือข้อความ TOOL:xxx)
+  function parseToolId(v, strict) {
+    v = String(v == null ? '' : v).trim();
+    try {
+      var u = new URL(v);
+      var t = u.searchParams.get('tool');
+      if (t) return t.trim();
+      var st = u.searchParams.get('liff.state');
+      if (st) {
+        var m = decodeURIComponent(st).match(/[?&]tool=([^&]+)/);
+        if (m) return decodeURIComponent(m[1]).trim();
+      }
+      var m2 = decodeURIComponent(u.search.replace(/^\?/, '')).match(/^TOOL\s*[:：]\s*(.+)$/i);
+      if (m2) return m2[1].trim();
+      if (strict) return null;
+    } catch (e) { if (strict) return null; }
+    var m3 = v.match(/^TOOL\s*[:：]\s*(.+)$/i);
+    if (m3) return m3[1].trim();
+    return strict ? null : v;
+  }
+
+  // ---------- สแกน QR ----------
+  async function startScan() {
+    if (state.scanning || !state.canScan) return;
+    state.scanning = true;
+    try {
+      do {
+        var r;
+        try { r = await liff.scanCodeV2(); } catch (e) { break; }
+        if (!r || !r.value) break;
+        addScanned(r.value);
+        await new Promise(function (ok) { setTimeout(ok, 350); });
+      } while ($('#cont').checked);
+    } finally {
+      state.scanning = false;
+    }
+  }
+
+  // ---------- ยืม / คืน ----------
+  async function submit(kind) {
+    if (state.busy) return;
+    var s = splitBasket();
+    var ids = kind === 'borrow' ? s.borrow : s.ret;
+    if (!ids.length) return;
+    state.busy = true;
+    renderBar();
+    try {
+      var payload = { ids: ids };
+      if (kind === 'return') payload.note = $('#note').value.trim();
+      var d = await api(kind, payload);
+      state.basket = state.basket.filter(function (id) { return ids.indexOf(id) < 0; });
+      if (kind === 'return') $('#note').value = '';
+      showResults(kind, d.results);
+      await refresh();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      state.busy = false;
+      renderBar();
+    }
+  }
+
+  function showResults(kind, results) {
+    var ok = results.filter(function (r) { return r.ok; }).length;
+    var html = '<h2>' + (kind === 'borrow' ? 'ผลการยืม' : 'ผลการคืน') + ' · สำเร็จ ' + ok + '/' + results.length + '</h2>' +
+      results.map(function (r) {
+        return '<div class="res ' + (r.ok ? 'ok' : 'fail') + '"><span class="mark">' + (r.ok ? '✔' : '✖') + '</span><span>' +
+          '<b>' + esc(r.id) + '</b> ' + esc(r.name || '') + '<br><span style="color:var(--muted)">' + esc(r.msg) + '</span></span></div>';
+      }).join('') +
+      '<div style="margin-top:12px"><button class="btn" id="closeModal" style="width:100%">ปิด</button></div>';
+    $('#sheet').innerHTML = html;
+    $('#modal').classList.add('open');
+  }
+
+  // ---------- เหตุการณ์ ----------
+  $('#list').addEventListener('click', function (e) {
+    var card = e.target.closest('.card');
+    if (!card) return;
+    if (card.getAttribute('aria-disabled') === 'true') {
+      var t = findTool(card.getAttribute('data-id'));
+      if (t) toast(t.id + ' ถูกยืมโดย ' + t.borrower);
+      return;
+    }
+    toggle(card.getAttribute('data-id'));
+  });
+  $('#basket').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-rm]');
+    if (b) toggle(b.getAttribute('data-rm'));
+  });
+  $('#clear').addEventListener('click', function () { state.basket = []; render(); });
+  $('#q').addEventListener('input', function (e) { state.q = e.target.value; render(); });
+  $('#tab-all').addEventListener('click', function () { state.tab = 'all'; render(); });
+  $('#tab-mine').addEventListener('click', function () { state.tab = 'mine'; render(); });
+  $('#chips').addEventListener('click', function (e) {
+    var c = e.target.closest('.chip');
+    if (!c) return;
+    state.filter = c.getAttribute('data-f');
+    Array.prototype.forEach.call(document.querySelectorAll('.chip'), function (x) {
+      x.setAttribute('aria-pressed', x === c ? 'true' : 'false');
+    });
+    render();
+  });
+  $('#refresh').addEventListener('click', function () {
+    refresh().then(function () { toast('อัปเดตแล้ว'); }).catch(function (e) { toast(e.message, true); });
+  });
+  $('#scan').addEventListener('click', startScan);
+  $('#doBorrow').addEventListener('click', function () { submit('borrow'); });
+  $('#doReturn').addEventListener('click', function () { submit('return'); });
+  $('#modal').addEventListener('click', function (e) {
+    if (e.target.id === 'modal' || e.target.id === 'closeModal') $('#modal').classList.remove('open');
+  });
+
+  // ---------- เริ่มทำงาน ----------
+  async function main() {
+    if (/ใส่/.test(CONFIG.LIFF_ID) || /ใส่/.test(CONFIG.API_URL)) {
+      fatal('ยังไม่ได้ตั้งค่า LIFF_ID และ API_URL ในไฟล์ index.html');
+      return;
+    }
+    try {
+      await liff.init({ liffId: CONFIG.LIFF_ID });
+    } catch (e) {
+      fatal('เริ่มต้น LIFF ไม่สำเร็จ: ' + (e && e.message ? e.message : e));
+      return;
+    }
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+
+    state.canScan = !!(liff.isInClient() && liff.isApiAvailable('scanCodeV2'));
+    $('#scan').hidden = !state.canScan;
+    $('#contWrap').hidden = !state.canScan;
+
+    try {
+      await refresh();
+    } catch (e) {
+      $('#list').innerHTML = '<div class="empty" style="color:var(--bad)">' + esc(e.message) + '</div>';
+      return;
+    }
+
+    // เปิดจากการสแกน QR ด้วยกล้อง/ลิงก์ LIFF (?tool=T001)
+    var deep = parseToolId(location.href, true);
+    if (deep) addScanned(deep);
+  }
+
+  main();
+})();
+</script>
+</body>
+</html>
