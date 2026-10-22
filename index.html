@@ -104,23 +104,6 @@
   .res .mark { flex: none; font-weight: 800; }
   .res.ok .mark { color: var(--free); }
   .res.fail .mark { color: var(--bad); }
-  .scanrow { display: flex; gap: 8px; margin-top: 10px; }
-  .scanrow .btn { flex: 1; padding: 11px 8px; }
-  #cam { position: fixed; inset: 0; z-index: 40; background: #000; display: none; }
-  #cam.open { display: block; }
-  #camVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
-  .camTop { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; justify-content: space-between;
-    gap: 8px; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
-    background: linear-gradient(rgba(0,0,0,.65), rgba(0,0,0,0)); color: #fff; font-weight: 700; }
-  .camFrame { position: absolute; left: 50%; top: 46%; width: min(68vw, 62vh); aspect-ratio: 1; transform: translate(-50%, -50%);
-    border: 3px solid rgba(255,255,255,.95); border-radius: 22px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.42); transition: border-color .15s; }
-  .camFrame.hit { border-color: var(--brand); }
-  .camFrame.miss { border-color: #ff5a4f; }
-  .camBottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 16px; padding-bottom: max(18px, env(safe-area-inset-bottom));
-    display: flex; flex-direction: column; align-items: center; gap: 10px;
-    background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.7)); }
-  #camMsg { color: #fff; text-align: center; font-size: .95rem; min-height: 1.4em; max-width: 92vw; overflow-wrap: anywhere; }
-  #camMsg.err { color: #ffb4ad; }
   .fatal { margin: 40px 16px; padding: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
 </style>
 </head>
@@ -139,10 +122,7 @@
   </div>
   <div class="tools">
     <input class="search" id="q" type="search" placeholder="ค้นหา ชื่อ / รหัส / S/N / หมวดหมู่" autocomplete="off">
-  </div>
-  <div class="scanrow">
-    <button class="btn" id="scanFast">📷 สแกนเร็ว (กล้องในหน้า)</button>
-    <button class="btn ghost" id="scan" hidden>สแกนด้วย LINE</button>
+    <button class="btn" id="scan" hidden>สแกน QR</button>
   </div>
   <div class="row2">
     <div class="chips" id="chips">
@@ -164,13 +144,6 @@
     <button class="btn" id="doBorrow" hidden></button>
     <button class="btn warn" id="doReturn" hidden></button>
   </div>
-</div>
-
-<div id="cam" role="dialog" aria-label="สแกน QR">
-  <video id="camVideo" playsinline muted autoplay></video>
-  <div class="camTop"><span>สแกน QR · เลือกแล้ว <b id="camCount">0</b> ชิ้น</span><button class="btn" id="camClose">เสร็จสิ้น</button></div>
-  <div class="camFrame" id="camFrame"></div>
-  <div class="camBottom"><div id="camMsg"></div><button class="btn ghost" id="camTorch" hidden>🔦 ไฟฉาย</button></div>
 </div>
 
 <div id="toast"></div>
@@ -204,8 +177,6 @@ var CONFIG = {
     busy: false, canScan: false, scanning: false
   };
 
-  var cam = { running: false, opening: false, stream: null, video: null, canvas: null, ctx: null, detector: null, last: '', lastT: 0, torch: false };
-
   function $(s) { return document.querySelector(s); }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -222,7 +193,6 @@ var CONFIG = {
     t.style.display = 'block';
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.style.display = 'none'; }, isErr ? 4500 : 2200);
-    if (cam.running) camSay(msg, isErr);
   }
   function fatal(msg) {
     document.body.innerHTML = '<div class="fatal"><b>ใช้งานไม่ได้</b><p>' + esc(msg) + '</p></div>';
@@ -401,183 +371,7 @@ var CONFIG = {
     return strict ? null : v;
   }
 
-  // ---------- สแกนเร็ว: กล้องในหน้าเว็บ (เปิดค้างไว้ สแกนต่อเนื่อง ไม่ต้องปิด-เปิดทุกชิ้น) ----------
-  var JSQR_URLS = [
-    'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js',
-    'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'
-  ];
-  var audioCtx = null;
-
-  function loadScript(url) {
-    return new Promise(function (ok, fail) {
-      var el = document.createElement('script');
-      el.src = url;
-      el.onload = ok;
-      el.onerror = function () { fail(new Error('load ' + url)); };
-      document.head.appendChild(el);
-    });
-  }
-
-  // ใช้ตัวอ่าน QR ของเครื่อง (BarcodeDetector) ถ้ามี ไม่มีก็ใช้ jsQR
-  async function ensureDecoder() {
-    if (cam.detector) return;
-    if ('BarcodeDetector' in window) {
-      try {
-        var fmts = await window.BarcodeDetector.getSupportedFormats();
-        if (fmts.indexOf('qr_code') >= 0) {
-          cam.detector = { kind: 'native', det: new window.BarcodeDetector({ formats: ['qr_code'] }) };
-          return;
-        }
-      } catch (e) { /* ใช้ jsQR แทน */ }
-    }
-    for (var i = 0; i < JSQR_URLS.length && typeof window.jsQR !== 'function'; i++) {
-      try { await loadScript(JSQR_URLS[i]); } catch (e) { /* ลองแหล่งถัดไป */ }
-    }
-    if (typeof window.jsQR !== 'function') throw new Error('LOAD_DECODER');
-    cam.detector = { kind: 'jsqr' };
-  }
-
-  function initAudio() {
-    try {
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-    } catch (e) {}
-  }
-  function beep(good) {
-    try {
-      if (audioCtx) {
-        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
-        o.frequency.value = good ? 880 : 300;
-        g.gain.value = 0.08;
-        o.connect(g); g.connect(audioCtx.destination);
-        o.start(); o.stop(audioCtx.currentTime + 0.09);
-      }
-    } catch (e) {}
-    try { if (navigator.vibrate) navigator.vibrate(good ? 40 : [60, 40, 60]); } catch (e) {}
-  }
-
-  function camSay(msg, isErr) {
-    var m = $('#camMsg');
-    m.textContent = msg;
-    m.className = isErr ? 'err' : '';
-  }
-
-  function camErrorText(e) {
-    var n = e && e.name;
-    if (e && e.message === 'LOAD_DECODER') return 'โหลดตัวอ่าน QR ไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองใหม่ หรือใช้ปุ่ม "สแกนด้วย LINE"';
-    if (n === 'NotAllowedError' || n === 'SecurityError') return 'ไม่ได้รับอนุญาตให้ใช้กล้อง เปิดสิทธิ์กล้องของแอป LINE ในตั้งค่ามือถือ หรือใช้ปุ่ม "สแกนด้วย LINE"';
-    if (n === 'NotFoundError' || n === 'OverconstrainedError') return 'ไม่พบกล้องที่ใช้ได้ในเครื่องนี้';
-    if (n === 'NotReadableError') return 'กล้องถูกใช้งานโดยแอปอื่นอยู่ ปิดแอปนั้นแล้วลองใหม่';
-    return 'เปิดกล้องไม่สำเร็จ' + (e && e.message ? ': ' + e.message : '') + ' ลองปุ่ม "สแกนด้วย LINE" แทน';
-  }
-
-  async function openCam() {
-    if (cam.running || cam.opening) return;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      toast('แอปหรือเครื่องนี้ไม่รองรับกล้องในหน้าเว็บ ใช้ปุ่ม "สแกนด้วย LINE" แทน', true);
-      return;
-    }
-    cam.opening = true;
-    initAudio(); // ต้องเริ่มจากการกดปุ่มของผู้ใช้ (ข้อกำหนดของ iOS)
-    $('#cam').classList.add('open');
-    $('#camCount').textContent = state.basket.length;
-    camSay('กำลังเปิดกล้อง…');
-    var results = await Promise.allSettled([
-      ensureDecoder(),
-      navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false
-      })
-    ]);
-    var stream = results[1].status === 'fulfilled' ? results[1].value : null;
-    var failure = results[0].status === 'rejected' ? results[0].reason : results[1].status === 'rejected' ? results[1].reason : null;
-    if (failure) {
-      if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
-      cam.opening = false;
-      $('#cam').classList.remove('open');
-      toast(camErrorText(failure), true);
-      return;
-    }
-    cam.stream = stream;
-    var v = $('#camVideo');
-    v.srcObject = stream;
-    v.muted = true;
-    try { await v.play(); } catch (e) { /* บางเครื่องเล่นอัตโนมัติ */ }
-    cam.video = v;
-    cam.canvas = cam.canvas || document.createElement('canvas');
-    cam.ctx = cam.canvas.getContext('2d', { willReadFrequently: true });
-    cam.last = ''; cam.lastT = 0; cam.torch = false;
-    var track = stream.getVideoTracks()[0];
-    var caps = track && track.getCapabilities ? track.getCapabilities() : null;
-    $('#camTorch').hidden = !(caps && caps.torch);
-    cam.running = true;
-    cam.opening = false;
-    camSay('วาง QR ในกรอบ จะอ่านต่อเนื่องจนกว่าจะกด "เสร็จสิ้น"');
-    camLoop();
-  }
-
-  function closeCam() {
-    var wasRunning = cam.running;
-    cam.running = false;
-    cam.opening = false;
-    if (cam.stream) cam.stream.getTracks().forEach(function (t) { t.stop(); });
-    cam.stream = null;
-    var v = $('#camVideo');
-    try { v.pause(); } catch (e) {}
-    v.srcObject = null;
-    $('#cam').classList.remove('open');
-    if (wasRunning) render();
-  }
-
-  async function decodeFrame() {
-    var v = cam.video;
-    if (!v || !v.videoWidth) return null;
-    if (cam.detector.kind === 'native') {
-      var found = await cam.detector.det.detect(v);
-      return found.length ? found[0].rawValue : null;
-    }
-    var scale = Math.min(1, 720 / v.videoWidth);
-    var w = Math.round(v.videoWidth * scale), h = Math.round(v.videoHeight * scale);
-    if (cam.canvas.width !== w || cam.canvas.height !== h) { cam.canvas.width = w; cam.canvas.height = h; }
-    cam.ctx.drawImage(v, 0, 0, w, h);
-    var img = cam.ctx.getImageData(0, 0, w, h);
-    var res = await window.jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
-    return res ? res.data : null;
-  }
-
-  async function camLoop() {
-    while (cam.running) {
-      var t0 = performance.now(), val = null;
-      try { val = await decodeFrame(); } catch (e) { val = null; }
-      if (val && cam.running) onCamValue(val);
-      var spent = performance.now() - t0;
-      await new Promise(function (ok) { setTimeout(ok, Math.max(30, 90 - spent)); });
-    }
-  }
-
-  function onCamValue(val) {
-    var now = Date.now();
-    var same = val === cam.last && now - cam.lastT < 3000;
-    cam.last = val;
-    cam.lastT = now; // ขณะที่ QR ยังอยู่ในกรอบ จะไม่เพิ่มซ้ำ
-    if (same) return;
-    var good = addScanned(val);
-    $('#camCount').textContent = state.basket.length;
-    beep(good);
-    var f = $('#camFrame');
-    f.className = 'camFrame ' + (good ? 'hit' : 'miss');
-    setTimeout(function () { f.className = 'camFrame'; }, 350);
-  }
-
-  async function toggleTorch() {
-    try {
-      var track = cam.stream.getVideoTracks()[0];
-      cam.torch = !cam.torch;
-      await track.applyConstraints({ advanced: [{ torch: cam.torch }] });
-    } catch (e) { cam.torch = false; toast('เปิดไฟฉายไม่ได้ในเครื่องนี้', true); }
-  }
-
-  // ---------- สแกน QR (ตัวสแกนของ LINE) ----------
+  // ---------- สแกน QR ----------
   async function startScan() {
     if (state.scanning || !state.canScan) return;
     state.scanning = true;
@@ -662,10 +456,6 @@ var CONFIG = {
     refresh().then(function () { toast('อัปเดตแล้ว'); }).catch(function (e) { toast(e.message, true); });
   });
   $('#scan').addEventListener('click', startScan);
-  $('#scanFast').addEventListener('click', openCam);
-  $('#camClose').addEventListener('click', closeCam);
-  $('#camTorch').addEventListener('click', toggleTorch);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) closeCam(); });
   $('#doBorrow').addEventListener('click', function () { submit('borrow'); });
   $('#doReturn').addEventListener('click', function () { submit('return'); });
   $('#modal').addEventListener('click', function (e) {
